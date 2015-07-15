@@ -5,7 +5,8 @@ import (
 	"net/http"
 )
 
-const version = "1.0.5"
+// http://semver.org/
+const version = "0.1.5"
 
 func main() {
 	fmt.Println("Go server version", version)
