@@ -8,7 +8,8 @@ import (
 	"unicode/utf8"
 )
 
-const version = "1.0.0"
+// http://semver.org/
+const version = "0.1.0"
 
 // Defines a single panel
 type Panel struct {
