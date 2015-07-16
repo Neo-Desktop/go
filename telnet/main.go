@@ -13,17 +13,17 @@ import (
 // http://semver.org/
 const version = "0.1.0"
 
-var globalPanels []PanelGroup
+var globalFrames []FrameGroup
 
-// Defines a single panel
-type Panel struct {
+// Defines a single Frame
+type Frame struct {
 	Timeout int64
-	Panel   string
+	Frame   string
 }
 
-type PanelGroup struct {
-	V4Panel []Panel
-	V6Panel []Panel
+type FrameGroup struct {
+	V4Frame []Frame
+	V6Frame []Frame
 }
 
 // Do some basic logging for any error
@@ -35,8 +35,8 @@ func checkErr(err error) bool {
 	return false
 }
 
-// Load a specified file into the panels slice
-func loadFile(fileName string, stringOut chan<- Panel) {
+// Load a specified file into the Frames slice
+func loadFile(fileName string, stringOut chan<- Frame) {
 	fileh, err := os.Open(fileName)
 
 	if checkErr(err) {
@@ -45,9 +45,9 @@ func loadFile(fileName string, stringOut chan<- Panel) {
 
 	scanner := bufio.NewScanner(fileh)
 
-	thisPanel := Panel{
+	thisFrame := Frame{
 		Timeout: 0,
-		Panel:   "START",
+		Frame:   "START",
 	}
 
 	for scanner.Scan() {
@@ -55,71 +55,70 @@ func loadFile(fileName string, stringOut chan<- Panel) {
 
 		if len(line) >= 1 {
 			if line[0] > '0' && line[0] <= '9' {
-				if thisPanel.Panel != "START" {
-					stringOut <- thisPanel
+				if thisFrame.Frame != "START" {
+					stringOut <- thisFrame
 				}
-				thisPanel = Panel{}
+				thisFrame = Frame{}
 				uhold, _ := strconv.ParseInt(line, 10, 64)
-				thisPanel.Timeout = uhold
-				// fmt.Println("start a new panel, wait time", thisPanel.Timeout)
+				thisFrame.Timeout = uhold
 			} else {
-				thisPanel.Panel = fmt.Sprintln(thisPanel.Panel, line)
+				thisFrame.Frame = fmt.Sprintln(thisFrame.Frame, line, "\r")
 			}
 		} else {
-			thisPanel.Panel = fmt.Sprintln(thisPanel.Panel, line)
+			thisFrame.Frame = fmt.Sprintln(thisFrame.Frame, line, "\r")
 		}
 
 	}
 
-	stringOut <- thisPanel
+	stringOut <- thisFrame
 
 	close(stringOut)
 
 }
 
-// Generates a slice of panels from a filename
+// Generates a slice of Frames from a filename
 // calls loadFile()
-func load(fileName string) []Panel {
+func load(fileName string) []Frame {
 	log.Println("Loading", fileName)
-	panels := make(chan Panel, 100)
+	Frames := make(chan Frame, 100)
 
-	go loadFile(fileName, panels)
+	go loadFile(fileName, Frames)
 
-	outPanel := make([]Panel, 0)
+	outFrame := make([]Frame, 0)
 
-	for range panels {
-		panel := <-panels
-		outPanel = append(outPanel, panel)
+	for range Frames {
+		Frame := <-Frames
+		outFrame = append(outFrame, Frame)
 	}
 
-	return outPanel
+	return outFrame
 
 }
 
-func PlayPanel(con net.Conn, frames []Panel) {
+func PlayFrame(con net.Conn, frames []Frame) {
 	for _, frame := range frames {
-		fmt.Fprintf(con, "\x1b[2J%s", frame.Panel)
-		time.Sleep(time.Duration(frame.Timeout) * time.Second)
+		fmt.Fprintf(con, "\x1b[2J\x1b[H%s", frame.Frame)
+		time.Sleep(time.Duration(frame.Timeout) * time.Second / 15)
 	}
 }
 
 func main() {
 	fmt.Println("Go ASCII Service version", version)
 
-	globalPanels = make([]PanelGroup, 0)
+	globalFrames = make([]FrameGroup, 0)
 
-	sw1 := PanelGroup{}
+	sw1 := FrameGroup{}
 	sem := make(chan string, 2)
 
 	go func(fileName string) {
 		log.Println("File:", fileName, "has begun loading")
-		sw1.V4Panel = load(fileName)
+		sw1.V4Frame = load(fileName)
 		sem <- fileName
 	}("swv4.txt")
 
 	go func(fileName string) {
 		log.Println("File:", fileName, "has begun loading")
-		sw1.V6Panel = load(fileName)
+		sw1.V6Frame = load(fileName)
 		sem <- fileName
 	}("swv6.txt")
 
@@ -128,15 +127,15 @@ func main() {
 
 	close(sem)
 
-	globalPanels = append(globalPanels, sw1)
+	globalFrames = append(globalFrames, sw1)
 
-	sock, err := net.Listen("tcp", ":21")
+	sock, err := net.Listen("tcp", ":23")
 
 	if checkErr(err) {
 		return
 	}
 
-	log.Println("Now listening on port 21")
+	log.Println("Now listening on port 23")
 
 	for {
 		conn, err := sock.Accept()
@@ -147,10 +146,10 @@ func main() {
 
 		if test.IP.To4() != nil {
 			log.Println("New v4 User: ", sock.Addr().String())
-			go PlayPanel(conn, globalPanels[0].V4Panel)
+			go PlayFrame(conn, globalFrames[0].V4Frame)
 		} else {
 			log.Println("New v6 User: ", sock.Addr().String())
-			go PlayPanel(conn, globalPanels[0].V6Panel)
+			go PlayFrame(conn, globalFrames[0].V6Frame)
 		}
 	}
 }
